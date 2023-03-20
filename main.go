@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/Shopify/sarama"
 	"github.com/go-logr/logr"
@@ -20,10 +21,12 @@ import (
 )
 
 type opts struct {
-	Brokers      string `short:"b" long:"brokers" env:"KAFKA_BROKERS" description:"Kafka brokers list" required:"true"`
-	DefaultTopic string `short:"s" long:"default-topic" env:"DEFAULT_TOPIC" description:"Default topic for messages" required:"false" default:"messages"`
-	NotionToken  string `short:"t" long:"notion-token" env:"NOTION_TOKEN" description:"Notion token" required:"true"`
-	NotionDB     string `short:"d" long:"notion-db" env:"NOTION_DB" description:"Notion database" required:"true"`
+	Brokers               string `short:"b" long:"brokers" env:"KAFKA_BROKERS" description:"Kafka brokers list" required:"true"`
+	DefaultTopic          string `short:"s" long:"default-topic" env:"DEFAULT_TOPIC" description:"Default topic for messages" required:"false" default:"messages"`
+	NotionToken           string `short:"t" long:"notion-token" env:"NOTION_TOKEN" description:"Notion token" required:"true"`
+	NotionDB              string `short:"d" long:"notion-db" env:"NOTION_DB" description:"Notion database" required:"true"`
+	BrokerConnRetries     int    `short:"r" long:"broker-conn-retries" env:"BROKER_CONC_RETRIES" description:"Number of retries for concurrent broker errors" required:"false" default:"5"`
+	BrokerConnRetryTimout int    `short:"d" long:"broker-conn-retry-timeout" env:"BROKER_CONC_RETRY_TIMEOUT" description:"Timeout for broker connection retry in seconds" required:"false" default:"30"`
 }
 
 func (o *opts) String() string {
@@ -44,9 +47,9 @@ func main() {
 
 	log.Printf("starting notion publisher with options: %s", o.String())
 
-	config := consumerConf(o)
+	config := consumerConf(&o)
 
-	notionClient := setupNotionClient(o)
+	notionClient := setupNotionClient(&o)
 
 	logger := setupLogger()
 
@@ -58,9 +61,22 @@ func main() {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	client, err := sarama.NewConsumerGroup(strings.Split(o.Brokers, ","), "1", config)
-	if err != nil {
-		log.Panicf("Error creating consumer group client: %v", err)
+
+	var client sarama.ConsumerGroup
+	var err error
+
+	for i := 0; i < o.BrokerConnRetries; i++ {
+		client, err = sarama.NewConsumerGroup(strings.Split(o.Brokers, ","), "1", config)
+		if err != nil {
+			logger.Info("error while creating kafka consumer", "error", err, "attempts left", o.BrokerConnRetries-i)
+			logger.Info("retry", "timeout", o.BrokerConnRetryTimout)
+			<-time.After(time.Duration(o.BrokerConnRetryTimout) * time.Second)
+		}
+	}
+
+	if client == nil {
+		logger.Error(err, "error while creating kafka consumer")
+		os.Exit(1)
 	}
 
 	consumptionIsPaused := false
@@ -122,7 +138,7 @@ func toggleConsumptionFlow(client sarama.ConsumerGroup, isPaused *bool, logger l
 	*isPaused = !*isPaused
 }
 
-func consumerConf(_ opts) *sarama.Config {
+func consumerConf(_ *opts) *sarama.Config {
 	config := sarama.NewConfig()
 	config.Consumer.Group.Rebalance.GroupStrategies = []sarama.BalanceStrategy{sarama.BalanceStrategyRoundRobin}
 	config.Consumer.Offsets.Initial = sarama.OffsetNewest
@@ -140,8 +156,6 @@ func stdoutLogger() logr.Logger {
 	return zerologr.New(&zl)
 }
 
-func setupNotionClient(o opts) *notion.Client {
+func setupNotionClient(o *opts) *notion.Client {
 	return notion.NewClient(o.NotionToken)
 }
-
-
