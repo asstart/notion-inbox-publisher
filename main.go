@@ -24,7 +24,7 @@ type opts struct {
 	Brokers               string `short:"b" long:"brokers" env:"KAFKA_BROKERS" description:"Kafka brokers list" required:"true"`
 	DefaultTopic          string `short:"s" long:"default-topic" env:"DEFAULT_TOPIC" description:"Default topic for messages" required:"false" default:"messages"`
 	NotionToken           string `short:"t" long:"notion-token" env:"NOTION_TOKEN" description:"Notion token" required:"true"`
-	NotionDB              string `short:"d" long:"notion-db" env:"NOTION_DB" description:"Notion database" required:"true"`
+	NotionDB              string `short:"n" long:"notion-db" env:"NOTION_DB" description:"Notion database" required:"true"`
 	BrokerConnRetries     int    `short:"r" long:"broker-conn-retries" env:"BROKER_CONC_RETRIES" description:"Number of retries for concurrent broker errors" required:"false" default:"5"`
 	BrokerConnRetryTimout int    `short:"d" long:"broker-conn-retry-timeout" env:"BROKER_CONC_RETRY_TIMEOUT" description:"Timeout for broker connection retry in seconds" required:"false" default:"30"`
 }
