@@ -27,8 +27,10 @@ type opts struct {
 }
 
 func (o *opts) String() string {
-	return fmt.Sprintf(`Brokers: %s
-		Default topic: %s`,
+	return fmt.Sprintf(`
+	Brokers: %s
+	Default topic: %s
+	`,
 		o.Brokers, o.DefaultTopic)
 }
 
@@ -68,7 +70,7 @@ func main() {
 	go func() {
 		defer wg.Done()
 		for {
-			if err := client.Consume(ctx, []string{o.DefaultTopic}, &consumer); err != nil {
+			if err = client.Consume(ctx, []string{o.DefaultTopic}, &consumer); err != nil {
 				logger.Error(err, "error from consumer")
 				os.Exit(1)
 			}
@@ -92,7 +94,7 @@ func main() {
 	for keepRunning {
 		select {
 		case <-ctx.Done():
-			logger.Info("terminating: context cancelled")
+			logger.Info("terminating: context canceled")
 			keepRunning = false
 		case <-sigterm:
 			logger.Info("terminating: via signal")
@@ -120,7 +122,7 @@ func toggleConsumptionFlow(client sarama.ConsumerGroup, isPaused *bool, logger l
 	*isPaused = !*isPaused
 }
 
-func consumerConf(o opts) *sarama.Config {
+func consumerConf(_ opts) *sarama.Config {
 	config := sarama.NewConfig()
 	config.Consumer.Group.Rebalance.GroupStrategies = []sarama.BalanceStrategy{sarama.BalanceStrategyRoundRobin}
 	config.Consumer.Offsets.Initial = sarama.OffsetNewest
@@ -142,49 +144,4 @@ func setupNotionClient(o opts) *notion.Client {
 	return notion.NewClient(o.NotionToken)
 }
 
-type Consumer struct {
-	ready        chan bool
-	notionClient *notion.Client
-	dbID         string
-	logger       logr.Logger
-}
 
-func (consumer *Consumer) Setup(sarama.ConsumerGroupSession) error {
-	close(consumer.ready)
-	return nil
-}
-
-func (consumer *Consumer) Cleanup(sarama.ConsumerGroupSession) error {
-	return nil
-}
-
-func (consumer *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
-	for {
-		select {
-		case message := <-claim.Messages():
-			log.Printf("Message claimed: value = %s, timestamp = %v, topic = %s", string(message.Value), message.Timestamp, message.Topic)
-			_, err := consumer.notionClient.CreatePage(context.TODO(), notion.CreatePageParams{
-				ParentType: notion.ParentTypeDatabase,
-				ParentID:   consumer.dbID,
-				DatabasePageProperties: &notion.DatabasePageProperties{
-					"Message": notion.DatabasePageProperty{
-						RichText: []notion.RichText{
-							{
-								Text: &notion.Text{
-									Content: fmt.Sprintf("%s", message.Value)},
-							},
-						},
-					},
-				},
-			})
-
-			if err != nil {
-				consumer.logger.Info("error while creating notion page", "error", err)
-			}
-			session.MarkMessage(message, "")
-			session.Commit()
-		case <-session.Context().Done():
-			return nil
-		}
-	}
-}

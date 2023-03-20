@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package message;
+
+option go_package = "github.com/asstart/tg-inbox-proxy/message";
+
+message Message {
+    int32 message_id = 1;
+    int32 user_id = 2;
+    string type = 3;
+    bytes content = 4;
+    int64 timestamp = 5;
+}
