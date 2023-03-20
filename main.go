@@ -47,9 +47,9 @@ func main() {
 
 	log.Printf("starting notion publisher with options: %s", o.String())
 
-	config := consumerConf(o)
+	config := consumerConf(&o)
 
-	notionClient := setupNotionClient(o)
+	notionClient := setupNotionClient(&o)
 
 	logger := setupLogger()
 
@@ -138,7 +138,7 @@ func toggleConsumptionFlow(client sarama.ConsumerGroup, isPaused *bool, logger l
 	*isPaused = !*isPaused
 }
 
-func consumerConf(_ opts) *sarama.Config {
+func consumerConf(_ *opts) *sarama.Config {
 	config := sarama.NewConfig()
 	config.Consumer.Group.Rebalance.GroupStrategies = []sarama.BalanceStrategy{sarama.BalanceStrategyRoundRobin}
 	config.Consumer.Offsets.Initial = sarama.OffsetNewest
@@ -156,6 +156,6 @@ func stdoutLogger() logr.Logger {
 	return zerologr.New(&zl)
 }
 
-func setupNotionClient(o opts) *notion.Client {
+func setupNotionClient(o *opts) *notion.Client {
 	return notion.NewClient(o.NotionToken)
 }
